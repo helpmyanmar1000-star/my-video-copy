@@ -1,72 +1,71 @@
 import telebot
 import time
-import random
 import os
 from flask import Flask
 from threading import Thread
 
-# --- ၁။ Flask Server (Render အတွက်) ---
+# --- CONFIGURATION ---
+TOKEN = os.getenv("8577050959:AAGG3qQ71Hhm-26FhjN-DkKVcRhVVAUHEFw")
+FROM_CHAT = "@mghlamyo666"
+TO_CHAT = "@mghlamyo777"
+START_ID = 5  # စတင်လိုသော ID ကို ဤနေရာတွင် ပြင်ပါ
+
+bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is Running!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
+    return "Bot is running!"
 
 def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# --- ၂။ Bot Setup ---
-# သင့်ရဲ့ Token ကို ဒီမှာထည့်ပါ (သို့မဟုတ် Render Settings ထဲမှာ ထည့်ပါ)
-TOKEN = "8577050959:AAGG3qQ71Hhm-26FhjN-DkKVcRhVVAUHEFw" 
-bot = telebot.TeleBot(TOKEN)
-
-# @username သုံးရင် မျက်တောင်အဖွင့်အပိတ် " " ပါရပါမယ်
-FROM_CHAT = "@mghlamyo666"  # ချန်နယ်အဟောင်း username
-TO_CHAT = "@mghlamyo777"    # ချန်နယ်အသစ် username
-START_ID = 5               # စမယ့် message id
+    app.run(host='0.0.0.0', port=8080)
 
 def start_forwarding():
-    video_count = 0        # အပုဒ် ၁၀၀ စစ်ဖို့
-    total_batch_count = 0  # အပုဒ် ၁၀၀၀ စစ်ဖို့
     current_id = START_ID
+    video_count = 0
+    media_queue = []
 
-    print("Bot စတင် အလုပ်လုပ်နေပါပြီ...")
+    print("Bot is starting to forward in Albums...")
 
     while True:
         try:
-            # ဗီဒီယိုကို ကူးယူခြင်း
-            bot.copy_message(TO_CHAT, FROM_CHAT, current_id)
+            # ဗီဒီယိုကို တစ်ပုဒ်ချင်း ဆွဲယူစစ်ဆေးခြင်း
+            msg = bot.forward_message(chat_id=TO_CHAT, from_chat_id=FROM_CHAT, message_id=current_id)
             
-            video_count += 1
-            total_batch_count += 1
-            print(f"ID {current_id} ကို ပို့ပြီးပါပြီ။ (Batch: {total_batch_count})")
+            # ဗီဒီယို ဖြစ်/မဖြစ် စစ်ဆေး (ဗီဒီယိုမဟုတ်ရင် ဖျက်ပြီး ကျော်သွားမယ်)
+            if msg.content_type == 'video':
+                # အခုလောလောဆယ် bot.copy_message ထက် Album စုဖို့ ပြင်ရမှာမို့
+                # media_queue ထဲမှာ ID တွေကို စုမယ်
+                media_queue.append(telebot.types.InputMediaVideo(msg.video.file_id))
+                bot.delete_message(TO_CHAT, msg.message_id) # Forward လုပ်ထားတဲ့ တစ်ပုဒ်ချင်းစီကို ပြန်ဖျက်
+                
+                # ၁၀ ခုပြည့်ရင် Album အနေနဲ့ ပို့မယ်
+                if len(media_queue) >= 10:
+                    bot.send_media_group(TO_CHAT, media_queue)
+                    video_count += 10
+                    media_queue = []
+                    print(f"Sent an album of 10 videos. Total: {video_count}")
+                    
+                    # ၉၅ ခု (သို့မဟုတ် ၁၀၀ နား) ရောက်ရင် ၅ မိနစ်နားမယ်
+                    if video_count >= 90:
+                        print("Reached limit, resting for 5 minutes...")
+                        time.sleep(300)
+                        video_count = 0
+            else:
+                bot.delete_message(TO_CHAT, msg.message_id) # ဗီဒီယိုမဟုတ်ရင် ဖျက်ပစ်
 
-            # တစ်ပုဒ်ချင်းစီကြား Random Delay (အကောင့်မပိတ်အောင် ၇ စက္ကန့်မှ ၁၅ စက္ကန့်)
-            time.sleep(random.randint(7, 15))
-
-            # ၅ မိနစ်တစ်ခါ ဗီဒီယို ၁၀၀ ပို့မယ်
-            if video_count >= 100:
-                print("ဗီဒီယို ၁၀၀ ပြည့်လို့ ၅ မိနစ် ခေတ္တနားနေပါတယ်...")
-                time.sleep(300) 
-                video_count = 0
-
-            # ၁၀၀၀ ပြည့်ရင် ၁ နာရီနားမယ်
-            if total_batch_count >= 1000:
-                print("ဗီဒီယို ၁၀၀၀ ပြည့်လို့ ၁ နာရီ အကြာကြီးနားပါမယ်...")
-                time.sleep(3600)
-                total_batch_count = 0
+            current_id += 1
+            time.sleep(2) # Telegram Flood ကာကွယ်ရန်
 
         except Exception as e:
-            # Message မရှိရင် (သို့) Video မဟုတ်ရင် ၅ စက္ကန့်နားပြီး နောက်တစ်ခုသွားမယ်
-            time.sleep(5)
-            pass
-        
-        current_id += 1
-
-if __name__ == "__main__":
-    keep_alive() 
-    start_forwarding()
+            # Album ထဲမှာ ကျန်နေတာရှိရင် ပို့လိုက်မယ် (ဥပမာ ၇ ခုပဲ ကျန်တော့ချိန်)
+            if media_queue:
+                try:
+                    bot.send_media_group(TO_CHAT, media_queue)
+                    video_count += len(media_queue)
+                    media_queue = []
+                except:
+                    pass
+            
+            print(f"Waiting for new content at ID: {current_id}")
+            time.sleep(30) # ဗီဒီယိုအသစ် ထပ်တက်လာမယ့်အချိန် စောင့်ခြင်း
